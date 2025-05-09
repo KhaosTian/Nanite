@@ -4,7 +4,7 @@ set_version("0.1.0")
 set_arch("x64")
 set_plat("windows")
 set_languages("c++20")
-set_toolchains("clang-cl")
+set_toolchains("msvc")
 
 add_rules("mode.debug", "mode.release")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
@@ -18,16 +18,32 @@ elseif is_mode("release") then
     add_defines("_NDEBUG")
 end
 
-target("Nanite")
-    set_kind("binary")
-
+-- Core Nanite library
+target("NaniteCore")
+    set_kind("static")
+    
     add_packages("spdlog", "glm", "meshoptimizer")
-
+    
     add_includedirs("source")
     add_includedirs("external/metis/include")
     add_linkdirs("external/metis/lib")
-
-    add_files("source/**.cpp")
+    
+    add_files("source/**.cpp|unity_plugin.cpp")
     add_headerfiles("source/**.h")
+    
     add_links("metis")
 target_end()
+
+-- Unity plugin DLL
+target("NaniteUnity")
+    set_kind("shared")
+    add_defines("UNITY_PLUGIN")
+    
+    add_deps("NaniteCore")
+    add_packages("spdlog", "glm", "meshoptimizer")
+    
+    add_includedirs("source")
+    
+    add_files("source/unity_plugin.cpp")
+target_end()
+

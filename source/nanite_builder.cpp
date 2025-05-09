@@ -1,139 +1,49 @@
+#include "utils/utils.h"
 #include <metis.h>
 #include <nanite_builder.h>
 #include <utils/log.h>
 
 namespace Nanite {
 
-constexpr uint32 kMeshletVertexMaxNum   = 255; // Meshlet最大顶点数
-constexpr uint32 kMeshletTriangleMaxNum = 128; // Meshlet最大三角面数
-
 using MehsletIndex = uint32;
 using VertexIndex  = uint32;
 
-NaniteBuilder::NaniteBuilder(std::vector<uint32>&& indices, std::vector<Vertex>&& vertices, float coneWeight):
+NaniteBuilder::NaniteBuilder(const std::vector<uint32>& indices, const std::vector<Point3f>& positions):
     m_indices(indices),
-    m_vertices(vertices),
-    m_coneWeight(coneWeight) {
-    size_t indexCount = m_indices.size();
+    m_positions(positions) {
+}
 
-    std::vector<uint32> remap(indexCount);
+MeshletsContext NaniteBuilder::Build() const {
+    constexpr uint32 kMeshletVertexMaxNum   = 64;
+    constexpr uint32 kMeshletTriangleMaxNum = 124;
+    constexpr uint32 kConeWeight            = 0.0f;
 
-    size_t vertexCount = meshopt_generateVertexRemap(
-        remap.data(),
+    MeshletsContext context {};
+
+    // 构建meshopt meshlet
+    size_t max_meshlets = meshopt_buildMeshletsBound(m_indices.size(), kMeshletVertexMaxNum, kMeshletTriangleMaxNum);
+    context.meshlets.resize(max_meshlets);
+    context.vertices.resize(max_meshlets * kMeshletVertexMaxNum);
+    context.triangles.resize(max_meshlets * kMeshletTriangleMaxNum * 3);
+
+    size_t meshletCount = meshopt_buildMeshlets(
+        context.meshlets.data(),
+        context.vertices.data(),
+        context.triangles.data(),
         m_indices.data(),
         m_indices.size(),
-        m_vertices.data(),
-        m_vertices.size(),
-        sizeof(Vertex)
+        reinterpret_cast<const float*>(m_positions.data()),
+        m_positions.size(),
+        sizeof(Vector3f),
+        kMeshletVertexMaxNum,
+        kMeshletTriangleMaxNum,
+        kConeWeight
     );
 
-    std::vector<uint32> remapIndices(indexCount);
-    std::vector<Vertex> remapVertices(vertexCount);
-
-    meshopt_remapIndexBuffer(remapIndices.data(), m_indices.data(), indexCount, remap.data());
-    meshopt_remapVertexBuffer(remapVertices.data(), m_vertices.data(), vertexCount, sizeof(Vertex), remap.data());
-
-    meshopt_optimizeVertexCache(remapIndices.data(), remapIndices.data(), indexCount, vertexCount);
-    meshopt_optimizeVertexFetch(
-        remapVertices.data(),
-        remapIndices.data(),
-        indexCount,
-        remapVertices.data(),
-        vertexCount,
-        sizeof(Vertex)
-    );
-
-    m_indices  = std::move(remapIndices);
-    m_vertices = std::move(remapVertices);
-}
-
-uint32 LoadVertexIndex(
-    const MeshletBuilderContext& context,
-    const meshopt_Meshlet&       meshlet,
-    uint32                       triangleId,
-    uint32                       vertexId
-) {
-    uint8 id = context.indices[meshlet.triangle_offset + triangleId * 3 + vertexId];
-    return context.vertices[meshlet.vertex_offset + id];
-}
-
-static MeshletBuilderContext BuildMeshlets(
-    const std::vector<uint32>& indices,
-    const std::vector<Vertex>& vertices,
-
-    float coneWeight
-) {
-    MeshletBuilderContext context {};
-
-    const uint32 vertexCount = vertices.size();
-    uint32 meshletCount      = meshopt_buildMeshletsBound(indices.size(), kMeshletVertexMaxNum, kMeshletTriangleMaxNum);
-    std::vector<meshopt_Meshlet> meshlets(meshletCount);
-
-    {
-        std::vector<uint32> meshletVertices(meshlets.size() * kMeshletVertexMaxNum);
-        std::vector<uint8>  meshletTriangles(meshlets.size() * kMeshletTriangleMaxNum);
-
-        meshletCount = meshopt_buildMeshlets(
-            meshlets.data(),
-            meshletVertices.data(),
-            meshletTriangles.data(),
-            indices.data(),
-            indices.size(),
-            &vertices.front().position.x,
-            vertexCount,
-            sizeof(vertices.front()),
-            kMeshletVertexMaxNum,
-            kMeshletTriangleMaxNum,
-            coneWeight
-        );
-        meshlets.resize(meshletCount);
-
-        context.indices  = std::move(meshletTriangles);
-        context.vertices = std::move(meshletVertices);
-    }
-
-    context.meshlets = {};
-    context.meshlets.reserve(meshlets.size());
-
-    for (const auto& meshlet: meshlets) {
-        meshopt_optimizeMeshlet(
-            &context.vertices[meshlet.vertex_offset],
-            &context.indices[meshlet.triangle_offset],
-            meshlet.triangle_count,
-            meshlet.vertex_count
-        );
-
-        meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-            &context.vertices[meshlet.vertex_offset],
-            &context.indices[meshlet.triangle_offset],
-            meshlet.triangle_count,
-            &vertices.front().position.x,
-            vertexCount,
-            sizeof(vertices.front())
-        );
-
-        Point3f posMin = Point3f(std::numeric_limits<float>::max());
-        Point3f posMax = Point3f(std::numeric_limits<float>::lowest());
-
-        Check(meshlet.triangle_count < 256);
-        Check(meshlet.vertex_count < 256);
-
-        // 构建meshlet的包围盒
-        for (uint32 triangleId = 0; triangleId < meshlet.triangle_count; triangleId++) {
-            for (uint32 i = 0; i < 3; i++) {
-                VertexIndex vIdx = LoadVertexIndex(context, meshlet, triangleId, i);
-                posMax           = Math::max(posMax, vertices[vIdx].position);
-                posMin           = Math::min(posMin, vertices[vIdx].position);
-            }
-        }
-    }
-
-    return context;
-}
-
-MeshletBuilderContext NaniteBuilder::Build() const {
-    MeshletBuilderContext context = BuildMeshlets(m_indices, m_vertices, m_coneWeight);
-
+    auto& last = context.meshlets[meshletCount - 1];
+    context.vertices.resize(last.vertex_offset + last.vertex_count);
+    context.triangles.resize(last.triangle_offset + ((last.triangle_count * 3 + 3) & ~3));
+    context.meshlets.resize(meshletCount);
     return context;
 }
 

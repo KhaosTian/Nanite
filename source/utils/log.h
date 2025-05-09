@@ -29,15 +29,15 @@ public:
     Logger(Logger&&)                 = delete;
 
     void InitLogger(size_t level, std::string_view pattern = GetDefaultLogPattern()) {
-        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        console_sink->set_level(static_cast<spdlog::level::level_enum>(level));
-        console_sink->set_pattern(std::string(pattern));
+        auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        consoleSink->set_level(static_cast<spdlog::level::level_enum>(level));
+        consoleSink->set_pattern(std::string(pattern));
 
-        std::vector<spdlog::sink_ptr> sinks { console_sink };
-        m_logger = std::make_shared<spdlog::logger>("ConsoleLogger", std::begin(sinks), std::end(sinks));
-        m_logger->set_level(static_cast<spdlog::level::level_enum>(level));
+        std::vector<spdlog::sink_ptr> sinks { consoleSink };
+        mLogger = std::make_shared<spdlog::logger>("ConsoleLogger", std::begin(sinks), std::end(sinks));
+        mLogger->set_level(static_cast<spdlog::level::level_enum>(level));
 
-        spdlog::set_default_logger(m_logger);
+        spdlog::set_default_logger(mLogger);
     }
 
 private:
@@ -45,7 +45,7 @@ private:
     ~Logger() = default;
 
 private:
-    std::shared_ptr<spdlog::logger> m_logger;
+    std::shared_ptr<spdlog::logger> mLogger;
 };
 
 // trace
