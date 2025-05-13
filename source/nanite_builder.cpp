@@ -52,38 +52,14 @@ MeshletsContext NaniteBuilder::Build() const {
     indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
     primitives.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3)); // 对齐到4的倍数
 
-    // 将primitives移动到context
-    context.primitives = std::move(primitives);
-
-    // 直接分配最终大小，避免多次扩容
-    context.indices.reserve(max_meshlets * kMeshletVertexMaxNum);
-
-    // 处理所有meshlet的索引
-    for (int i = 0; i < context.meshlets.size(); i++) {
-        auto&        meshlet     = context.meshlets[i];
-        const size_t dest_offset = i * kMeshletVertexMaxNum;
-
-        // 使用std::copy_n复制实际顶点索引
-        std::copy_n(
-            m_indices.begin() + meshlet.vertex_offset,
-            meshlet.vertex_count,
-            context.indices.begin() + dest_offset
-        );
-
-        // 用最后一个顶点填充剩余部分
-        if (meshlet.vertex_count < kMeshletVertexMaxNum) {
-            uint32_t last_vertex = *(m_indices.begin() + meshlet.vertex_offset + meshlet.vertex_count - 1);
-            std::fill_n(
-                context.indices.begin() + dest_offset + meshlet.vertex_count,
-                kMeshletVertexMaxNum - meshlet.vertex_count,
-                last_vertex
-            );
-        }
-
-        // 更新meshlet数据
-        meshlet.vertex_offset = dest_offset;
-        meshlet.vertex_count  = kMeshletVertexMaxNum;
+    // 拷贝
+    context.primitives.clear();
+    context.primitives.reserve(primitives.size());
+    for (auto val: primitives) {
+        context.primitives.push_back(static_cast<uint32_t>(val));
     }
+
+    context.indices = std::move(indices);
 
     return context;
 }

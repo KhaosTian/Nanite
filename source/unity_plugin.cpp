@@ -100,12 +100,12 @@ EXPORT_API uint32_t GetTriangleCount(void* context) {
     auto meshletsContext = static_cast<Nanite::MeshletsContext*>(context);
     return static_cast<uint32_t>(meshletsContext->primitives.size());
 }
-EXPORT_API bool GetTriangles(void* context, uint8_t* triangles, uint32_t bufferSize) {
+EXPORT_API bool GetTriangles(void* context, uint32_t* triangles, uint32_t bufferSize) {
     if (!context || !triangles) return false;
 
     auto meshletsContext = static_cast<Nanite::MeshletsContext*>(context);
     if (bufferSize < meshletsContext->primitives.size()) return false;
 
-    std::memcpy(triangles, meshletsContext->primitives.data(), meshletsContext->primitives.size() * sizeof(uint8_t));
+    std::memcpy(triangles, meshletsContext->primitives.data(), meshletsContext->primitives.size() * sizeof(uint32_t));
     return true;
 }
