@@ -1,21 +1,21 @@
 #include "utils/utils.h"
 #include <algorithm>
 #include <metis.h>
-#include <nanite_builder.h>
+#include <Nanity_builder.h>
 #include <utils/log.h>
 #include <vector>
 
-namespace Nanite {
+namespace Nanity {
 
 using MehsletIndex = uint32;
 using VertexIndex  = uint32;
 
-NaniteBuilder::NaniteBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices):
+NanityBuilder::NanityBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices):
     m_indices(indices),
     m_vertices(vertices) {
 }
 
-MeshletsContext NaniteBuilder::Build() const {
+MeshletsContext NanityBuilder::Build() const {
     constexpr uint32 kMeshletVertexMaxNum   = 64;
     constexpr uint32 kMeshletTriangleMaxNum = 124;
     constexpr float  kConeWeight            = 0.0f;
@@ -81,4 +81,4 @@ MeshletsContext NaniteBuilder::Build() const {
     return context;
 }
 
-} // namespace Nanite
+} // namespace Nanity

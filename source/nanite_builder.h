@@ -3,7 +3,7 @@
 #include <utils/utils.h>
 #include <meshoptimizer.h>
 
-namespace Nanite {
+namespace Nanity {
 using Meshlet = meshopt_Meshlet;
 
 struct MeshletsContext {
@@ -16,9 +16,9 @@ struct Vertex {
     Point3f position;
 };
 
-class NaniteBuilder {
+class NanityBuilder {
 public:
-    explicit NaniteBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices);
+    explicit NanityBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices);
 
     MeshletsContext Build() const;
     void            FuseVertices(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices) const;
@@ -30,4 +30,4 @@ private:
     std::vector<uint32> m_indices;
     std::vector<Vertex> m_vertices;
 };
-} // namespace Nanite
+} // namespace Nanity

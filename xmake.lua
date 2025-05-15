@@ -1,4 +1,4 @@
-set_project("Nanite")
+set_project("Nanity")
 set_version("0.1.0")
 
 set_arch("x64")
@@ -18,8 +18,8 @@ elseif is_mode("release") then
     add_defines("_NDEBUG")
 end
 
--- Core Nanite library
-target("NaniteCore")
+-- Core Nanity library
+target("NanityCore")
     set_kind("static")
     
     add_packages("spdlog", "glm", "meshoptimizer")
@@ -35,11 +35,11 @@ target("NaniteCore")
 target_end()
 
 -- Unity plugin DLL
-target("NaniteUnity")
+target("NanityUnity")
     set_kind("shared")
     add_defines("UNITY_PLUGIN")
     
-    add_deps("NaniteCore")
+    add_deps("NanityCore")
     add_packages("spdlog", "glm", "meshoptimizer")
     
     add_includedirs("source")

@@ -16,7 +16,7 @@ inline constexpr std::string_view GetDefaultLogPattern() {
 #endif
 }
 
-namespace Nanite {
+namespace Nanity {
 class Logger final: NoCopyable {
 public:
     static Logger& GetLogger() {
@@ -138,13 +138,13 @@ struct LogCritical {
 template<typename... Args>
 LogCritical(fmt::format_string<Args...> fmt, Args&&... args) -> LogCritical<Args...>;
 
-} // namespace Nanite
+} // namespace Nanity
 
-#ifdef NANITE_DEBUG
+#ifdef Nanity_DEBUG
     #define Check(x) \
         do { \
             if (!(x)) { \
-                ::Nanite::LogCritical("Check '{}' failed", #x); \
+                ::Nanity::LogCritical("Check '{}' failed", #x); \
                 if (IsDebuggerAttach()) { \
                     __debugbreak(); \
                 } else { \

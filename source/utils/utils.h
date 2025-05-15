@@ -3,9 +3,9 @@
 #include "pch.h"
 
 #if defined(_DEBUG) || defined(DEBUG)
-    #define NANITE_DEBUG 1
+    #define Nanity_DEBUG 1
 #else
-    #define NANITE_DEBUG 0
+    #define Nanity_DEBUG 0
 #endif
 
 #define RESTRICT __restrict
@@ -23,7 +23,7 @@ inline bool IsDebuggerAttach() {
 #endif
 
 // 基本类型
-namespace Nanite {
+namespace Nanity {
 using int8  = int8_t;
 using int16 = int16_t;
 using int32 = int32_t;
@@ -33,10 +33,10 @@ using uint8  = uint8_t;
 using uint16 = uint16_t;
 using uint32 = uint32_t;
 using uint64 = uint64_t;
-} // namespace Nanite
+} // namespace Nanity
 
 // 线代类型
-namespace Nanite {
+namespace Nanity {
 namespace Math = glm;
 using Point2f  = Math::vec2;
 using Point3f  = Math::vec3;
@@ -47,10 +47,10 @@ using Vector4f = Math::vec4;
 using Matrix3f = Math::mat3;
 using Matrix4f = Math::mat4;
 
-} // namespace Nanite
+} // namespace Nanity
 
 // 数学扩展
-namespace Nanite {
+namespace Nanity {
 inline static uint32 MurmurFinalize32(uint32 hash) {
     hash ^= hash >> 16;
     hash *= 0x85ebca6b;
@@ -79,4 +79,4 @@ template<class T>
 inline static constexpr T DivideAndRoundUp(T Dividend, T Divisor) {
     return (Dividend + Divisor - 1) / Divisor;
 }
-} // namespace Nanite
+} // namespace Nanity

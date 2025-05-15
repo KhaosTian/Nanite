@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Nanite {
+namespace Nanity {
 class NoCopyable {
 protected:
     NoCopyable()  = default;
@@ -9,4 +9,4 @@ protected:
 private:
     NoCopyable(NoCopyable&&) = delete;
 };
-} // namespace Nanite
+} // namespace Nanity
