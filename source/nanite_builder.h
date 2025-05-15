@@ -7,8 +7,8 @@ namespace Nanite {
 using Meshlet = meshopt_Meshlet;
 
 struct MeshletsContext {
-    std::vector<uint32>  primitives; // a set of indices that define the triangles in the meshlet
-    std::vector<uint32>  indices; // a list of vertex indices mappings
+    std::vector<uint32>  triangles; // a set of indices that define the triangles in the meshlet
+    std::vector<uint32>  vertices; // a list of vertex indices mappings
     std::vector<Meshlet> meshlets;
 };
 

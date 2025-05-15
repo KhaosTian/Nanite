@@ -83,29 +83,29 @@ EXPORT_API uint32_t GetVerticesCount(void* context) {
     if (!context) return 0;
 
     auto meshletsContext = static_cast<Nanite::MeshletsContext*>(context);
-    return static_cast<uint32_t>(meshletsContext->indices.size());
+    return static_cast<uint32_t>(meshletsContext->vertices.size());
 }
 EXPORT_API bool GetVertices(void* context, uint32_t* vertices, uint32_t bufferSize) {
     if (!context || !vertices) return false;
 
     auto meshletsContext = static_cast<Nanite::MeshletsContext*>(context);
-    if (bufferSize < meshletsContext->indices.size()) return false;
+    if (bufferSize < meshletsContext->vertices.size()) return false;
 
-    std::memcpy(vertices, meshletsContext->indices.data(), meshletsContext->indices.size() * sizeof(uint32_t));
+    std::memcpy(vertices, meshletsContext->vertices.data(), meshletsContext->vertices.size() * sizeof(uint32_t));
     return true;
 }
 EXPORT_API uint32_t GetTriangleCount(void* context) {
     if (!context) return 0;
 
     auto meshletsContext = static_cast<Nanite::MeshletsContext*>(context);
-    return static_cast<uint32_t>(meshletsContext->primitives.size());
+    return static_cast<uint32_t>(meshletsContext->triangles.size());
 }
 EXPORT_API bool GetTriangles(void* context, uint32_t* triangles, uint32_t bufferSize) {
     if (!context || !triangles) return false;
 
     auto meshletsContext = static_cast<Nanite::MeshletsContext*>(context);
-    if (bufferSize < meshletsContext->primitives.size()) return false;
+    if (bufferSize < meshletsContext->triangles.size()) return false;
 
-    std::memcpy(triangles, meshletsContext->primitives.data(), meshletsContext->primitives.size() * sizeof(uint32_t));
+    std::memcpy(triangles, meshletsContext->triangles.data(), meshletsContext->triangles.size() * sizeof(uint32_t));
     return true;
 }

@@ -15,9 +15,6 @@ NaniteBuilder::NaniteBuilder(const std::vector<uint32>& indices, const std::vect
     m_vertices(vertices) {
 }
 
-void FuseVertices(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices) {
-}
-
 MeshletsContext NaniteBuilder::Build() const {
     constexpr uint32 kMeshletVertexMaxNum   = 64;
     constexpr uint32 kMeshletTriangleMaxNum = 124;
@@ -26,16 +23,17 @@ MeshletsContext NaniteBuilder::Build() const {
     MeshletsContext context {};
 
     // 构建meshopt meshlet
+    std::vector<Meshlet> meshlets;
     size_t max_meshlets = meshopt_buildMeshletsBound(m_indices.size(), kMeshletVertexMaxNum, kMeshletTriangleMaxNum);
-    context.meshlets.resize(max_meshlets);
+    meshlets.resize(max_meshlets);
 
-    std::vector<uint32> indices(max_meshlets * kMeshletVertexMaxNum);
-    std::vector<uint8>  primitives(max_meshlets * kMeshletTriangleMaxNum * 3);
+    std::vector<uint32> meshlet_vertices(max_meshlets * kMeshletVertexMaxNum);
+    std::vector<uint8>  meshlet_triangles(max_meshlets * kMeshletTriangleMaxNum * 3);
 
     size_t meshlet_count = meshopt_buildMeshlets(
-        context.meshlets.data(),
-        indices.data(),
-        primitives.data(),
+        meshlets.data(),
+        meshlet_vertices.data(),
+        meshlet_triangles.data(),
         m_indices.data(),
         m_indices.size(),
         &m_vertices[0].position.x,
@@ -47,19 +45,38 @@ MeshletsContext NaniteBuilder::Build() const {
     );
 
     // 裁剪多余的数组元素
-    context.meshlets.resize(meshlet_count);
-    auto& last_meshlet = context.meshlets.back();
-    indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-    primitives.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3)); // 对齐到4的倍数
+    meshlets.resize(meshlet_count);
+    auto& last_meshlet = meshlets.back();
+    meshlet_vertices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
+    meshlet_triangles.resize(
+        last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3)
+    ); // 对齐到4的倍数
 
-    // 拷贝
-    context.primitives.clear();
-    context.primitives.reserve(primitives.size());
-    for (auto val: primitives) {
-        context.primitives.push_back(static_cast<uint32_t>(val));
+    std::vector<uint32_t> meshlet_triangles_u32;
+    for (auto& m: meshlets) {
+        uint32 triangle_offset = static_cast<uint32>(meshlet_triangles_u32.size());
+
+        for (uint32 i = 0; i < m.triangle_count; ++i) {
+            uint32 i0 = 3 * i + 0 + m.triangle_offset;
+            uint32 i1 = 3 * i + 1 + m.triangle_offset;
+            uint32 i2 = 3 * i + 2 + m.triangle_offset;
+
+            uint8 vIdx0 = meshlet_triangles[i0];
+            uint8 vIdx1 = meshlet_triangles[i1];
+            uint8 vIdx2 = meshlet_triangles[i2];
+
+            uint32_t packed = ((static_cast<uint32_t>(vIdx0) & 0xFF) << 0) |
+                              ((static_cast<uint32_t>(vIdx1) & 0xFF) << 8) |
+                              ((static_cast<uint32_t>(vIdx2) & 0xFF) << 16);
+            meshlet_triangles_u32.push_back(packed);
+        }
+        m.triangle_offset = triangle_offset;
     }
 
-    context.indices = std::move(indices);
+    // 拷贝
+    context.meshlets  = std::move(meshlets);
+    context.triangles = std::move(meshlet_triangles_u32);
+    context.vertices  = std::move(meshlet_vertices);
 
     return context;
 }
