@@ -35,7 +35,7 @@ target("NanityCore")
 target_end()
 
 -- Unity plugin DLL
-target("NanityUnity")
+target("NanityPlugin")
     set_kind("shared")
     add_defines("UNITY_PLUGIN")
     

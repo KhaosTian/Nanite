@@ -1,4 +1,4 @@
-#include "Nanity_builder.h"
+#include "nanity.h"
 #include <cstdint>
 // Define export macros for DLL
 #if defined(_WIN32) || defined(_WIN64)

@@ -1,7 +1,7 @@
+#include "meshoptimizer.h"
 #include "utils/utils.h"
-#include <algorithm>
 #include <metis.h>
-#include <Nanity_builder.h>
+#include <nanity.h>
 #include <utils/log.h>
 #include <vector>
 
@@ -13,6 +13,29 @@ using VertexIndex  = uint32;
 NanityBuilder::NanityBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices):
     m_indices(indices),
     m_vertices(vertices) {
+    // size_t              index_count = indices.size();
+    // std::vector<uint32> remap(indices.size());
+    // size_t              vertex_count =
+    //     meshopt_generateVertexRemap(&remap[0], indices.data(), index_count, &vertices[0], index_count, sizeof(Vertex));
+
+    // std::vector<Vertex> remapVertices(vertex_count);
+    // std::vector<uint32> remapIndices(index_count);
+
+    // meshopt_remapVertexBuffer(remapVertices.data(), vertices.data(), index_count, sizeof(Vertex), remap.data());
+    // meshopt_remapIndexBuffer(remapIndices.data(), indices.data(), index_count, remap.data());
+
+    // meshopt_optimizeVertexCache(remapIndices.data(), remapIndices.data(), index_count, vertex_count);
+    // meshopt_optimizeVertexFetch(
+    //     remapVertices.data(),
+    //     remapIndices.data(),
+    //     index_count,
+    //     remapVertices.data(),
+    //     vertex_count,
+    //     sizeof(Vertex)
+    // );
+
+    // m_indices  = std::move(remapIndices);
+    // m_vertices = std::move(remapVertices);
 }
 
 MeshletsContext NanityBuilder::Build() const {
