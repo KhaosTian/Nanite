@@ -10,12 +10,14 @@ add_rules("mode.debug", "mode.release")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
 add_rules("plugin.vsxmake.autoupdate")
 
-add_requires("spdlog", "glm", "meshoptimizer")
+add_requires("spdlog", "glm", "meshoptimizer 0.22")
 
 if is_mode("debug") then 
     add_defines("_DEBUG")
+    set_runtimes("MDd")
 elseif is_mode("release") then 
     add_defines("_NDEBUG")
+    set_runtimes("MD")
 end
 
 -- Core Nanity library
