@@ -1,3 +1,4 @@
+#include "nanity.h"
 #include "glm/ext/quaternion_geometric.hpp"
 #include "glm/geometric.hpp"
 #include "meshoptimizer.h"
@@ -91,8 +92,12 @@ MeshletsContext NanityBuilder::Build() const {
         last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3)
     ); // 对齐到4的倍数
 
+    std::vector<BoundsData> meshlet_bounds(meshlets.size());
     // 填充meshlet信息到context
-    for (const auto& meshlet: meshlets) {
+    for (int i = 0; i < meshlets.size(); i++) {
+        auto& meshlet = meshlets[i];
+        auto& bounds  = meshlet_bounds[i];
+
         // 优化meshlet的局部性
         meshopt_optimizeMeshlet(
             &meshlet_vertices[meshlet.vertex_offset],
@@ -102,7 +107,7 @@ MeshletsContext NanityBuilder::Build() const {
         );
 
         // 获取meshlet的包围体和法线锥
-        meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+        meshopt_Bounds meshopt_bounds = meshopt_computeMeshletBounds(
             &meshlet_vertices[meshlet.vertex_offset],
             &meshlet_triangles[meshlet.triangle_offset],
             meshlet.triangle_count,
@@ -111,22 +116,16 @@ MeshletsContext NanityBuilder::Build() const {
             sizeof(m_vertices[0])
         );
 
-        Vector3f bounds_center { bounds.center[0], bounds.center[1], bounds.center[2] };
-        Vector3f cone_apex { bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2] };
-        Vector3f cone_axis(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]);
-        float    angle = acos(bounds.cone_cutoff); // cone_cutoff 是 cos(角度)，需要转换为 -cos(角度+90°)
-        float    modifiedCutoff = -cos(angle + 1.57079632679f); // 1.57... 是 90° 的弧度值
-        float    apex_offset =
-            Math::length(bounds_center - cone_apex) / Math::dot(Math::normalize(bounds_center - cone_apex), cone_axis);
+        Vector3f center { meshopt_bounds.center[0], meshopt_bounds.center[1], meshopt_bounds.center[2] };
+        Vector3f apex { meshopt_bounds.cone_apex[0], meshopt_bounds.cone_apex[1], meshopt_bounds.cone_apex[2] };
+        Vector3f axis(meshopt_bounds.cone_axis[0], meshopt_bounds.cone_axis[1], meshopt_bounds.cone_axis[2]);
+        float angle = acos(meshopt_bounds.cone_cutoff); // cone_cutoff 是 cos(角度)，需要转换为 -cos(角度+90°)
+        float modifiedCutoff = -cos(angle + 1.57079632679f); // 1.57... 是 90° 的弧度值
+        float apex_offset    = Math::length(center - apex) / Math::dot(Math::normalize(center - apex), axis);
 
-        Meshlet newMeshlet {};
-
-        newMeshlet.info               = meshlet;
-        newMeshlet.bounds.sphere      = Vector4f(bounds_center, bounds.radius);
-        newMeshlet.bounds.normal_cone = PackCone(cone_axis, modifiedCutoff);
-        newMeshlet.bounds.apex_offset = apex_offset;
-
-        context.meshlets.push_back(newMeshlet);
+        bounds.sphere      = Vector4f(center, meshopt_bounds.radius);
+        bounds.normal_cone = PackCone(axis, modifiedCutoff);
+        bounds.apex_offset = apex_offset;
     }
 
     std::vector<uint32_t> meshlet_triangles_u32;
@@ -151,8 +150,10 @@ MeshletsContext NanityBuilder::Build() const {
     }
 
     // 拷贝
+    context.meshlets  = std::move(meshlets);
     context.triangles = std::move(meshlet_triangles_u32);
     context.vertices  = std::move(meshlet_vertices);
+    context.bounds    = std::move(meshlet_bounds);
 
     return context;
 }

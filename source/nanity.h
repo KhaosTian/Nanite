@@ -10,15 +10,13 @@ struct BoundsData {
     float    apex_offset;
 };
 
-struct Meshlet {
-    meshopt_Meshlet info;
-    BoundsData      bounds;
-};
+using Meshlet = meshopt_Meshlet;
 
 struct MeshletsContext {
-    std::vector<uint32>  triangles; // a set of indices that define the triangles in the meshlet
-    std::vector<uint32>  vertices; // a list of vertex indices mappings
-    std::vector<Meshlet> meshlets;
+    std::vector<uint32>     triangles; // a set of indices that define the triangles in the meshlet
+    std::vector<uint32>     vertices; // a list of vertex indices mappings
+    std::vector<Meshlet>    meshlets;
+    std::vector<BoundsData> bounds;
 };
 
 struct Vertex {
