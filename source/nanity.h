@@ -4,7 +4,16 @@
 #include <meshoptimizer.h>
 
 namespace Nanity {
-using Meshlet = meshopt_Meshlet;
+struct BoundsData {
+    Vector4f sphere;
+    uint32   normal_cone;
+    float    apex_offset;
+};
+
+struct Meshlet {
+    meshopt_Meshlet info;
+    BoundsData      bounds;
+};
 
 struct MeshletsContext {
     std::vector<uint32>  triangles; // a set of indices that define the triangles in the meshlet
