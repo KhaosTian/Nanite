@@ -119,9 +119,10 @@ MeshletsContext NanityBuilder::Build() const {
         Vector3f center { meshopt_bounds.center[0], meshopt_bounds.center[1], meshopt_bounds.center[2] };
         Vector3f apex { meshopt_bounds.cone_apex[0], meshopt_bounds.cone_apex[1], meshopt_bounds.cone_apex[2] };
         Vector3f axis(meshopt_bounds.cone_axis[0], meshopt_bounds.cone_axis[1], meshopt_bounds.cone_axis[2]);
-        float angle = acos(meshopt_bounds.cone_cutoff); // cone_cutoff 是 cos(角度)，需要转换为 -cos(角度+90°)
+
+        float angle          = acos(meshopt_bounds.cone_cutoff); // cone_cutoff 是 cos(角度)，需要转换为 -cos(角度+90°)
         float modifiedCutoff = -cos(angle + 1.57079632679f); // 1.57... 是 90° 的弧度值
-        float apex_offset    = Math::length(center - apex) / Math::dot(Math::normalize(center - apex), axis);
+        float apex_offset    = Math::dot(center - apex, axis);
 
         bounds.sphere      = Vector4f(center, meshopt_bounds.radius);
         bounds.normal_cone = PackCone(axis, modifiedCutoff);

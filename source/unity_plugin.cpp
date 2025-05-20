@@ -109,3 +109,23 @@ EXPORT_API bool GetTriangles(void* context, uint32_t* triangles, uint32_t buffer
     std::memcpy(triangles, meshletsContext->triangles.data(), meshletsContext->triangles.size() * sizeof(uint32_t));
     return true;
 }
+
+EXPORT_API uint32_t GetBoundsCount(void* context) {
+    if (!context) return 0;
+
+    auto meshletsContext = static_cast<Nanity::MeshletsContext*>(context);
+    return static_cast<uint32_t>(meshletsContext->bounds.size());
+}
+EXPORT_API bool GetBounds(void* context, Nanity::BoundsData* bounds_data, uint32_t bufferSize) {
+    if (!context || !bounds_data) return false;
+
+    auto meshletsContext = static_cast<Nanity::MeshletsContext*>(context);
+    if (bufferSize < meshletsContext->bounds.size()) return false;
+
+    std::memcpy(
+        bounds_data,
+        meshletsContext->bounds.data(),
+        meshletsContext->bounds.size() * sizeof(Nanity::BoundsData)
+    );
+    return true;
+}
