@@ -2,39 +2,41 @@
 
 #include <utils/utils.h>
 #include <meshoptimizer.h>
+#include <vector>
 
+// nanity.h
 namespace Nanity {
-struct BoundsData {
-    Vector4f sphere;
-    uint32   normal_cone;
-    float    apex_offset;
+
+struct Vertex {
+    Vector3f position;
 };
 
 using Meshlet = meshopt_Meshlet;
 
+struct BoundsData {
+    Vector4f sphere; // xyz = center, w = radius
+    uint32   normal_cone; // 紧凑的法线锥表示
+    float    apex_offset; // 锥顶点相对于球心的偏移距离
+};
+
 struct MeshletsContext {
-    std::vector<uint32>     triangles; // a set of indices that define the triangles in the meshlet
-    std::vector<uint32>     vertices; // a list of vertex indices mappings
-    std::vector<Meshlet>    meshlets;
-    std::vector<BoundsData> bounds;
+    std::vector<uint32>     triangles; // meshlet局部三角形索引
+    std::vector<uint32>     vertices; // meshlet顶点映射到原始顶点的索引
+    std::vector<Meshlet>    meshlets; // meshlet描述数据
+    std::vector<BoundsData> bounds; // meshlet包围盒数据
+    std::vector<Vertex>     opt_vertices; // 优化后的顶点数组
 };
 
-struct Vertex {
-    Point3f position;
-};
-
-class NanityBuilder {
+// 新的静态类设计
+class MeshletBuilder {
 public:
-    explicit NanityBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices);
-
-    MeshletsContext Build() const;
-    void            FuseVertices(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices) const;
-
-    const std::vector<uint32>& GetIndices() const { return m_indices; }
-    const std::vector<Vertex>& GetVertices() const { return m_vertices; }
+    static MeshletsContext BuildMeshlets(std::vector<uint32>& indices, std::vector<Vertex>& vertices);
 
 private:
-    std::vector<uint32> m_indices;
-    std::vector<Vertex> m_vertices;
+    // 工具函数
+    static void   FuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices);
+    static int32  HashPosition(const Vector3f& position);
+    static uint32 PackCone(Vector3f normal, float cutoff);
 };
+
 } // namespace Nanity

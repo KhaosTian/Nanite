@@ -1,84 +1,115 @@
 #include "nanity.h"
-#include "glm/ext/quaternion_geometric.hpp"
-#include "glm/geometric.hpp"
-#include "meshoptimizer.h"
 #include "utils/utils.h"
 #include <metis.h>
-#include <nanity.h>
-#include <utils/log.h>
-#include <vector>
+#include "utils/cityhash.h"
 
+// nanity.cpp
 namespace Nanity {
 
-using MehsletIndex = uint32;
-using VertexIndex  = uint32;
+void MeshletBuilder::FuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices) {
+    std::vector<Vertex> remapVertices;
+    remapVertices.reserve(vertices.size());
 
-NanityBuilder::NanityBuilder(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices):
-    m_indices(indices),
-    m_vertices(vertices) {
-    // size_t              index_count = indices.size();
-    // std::vector<uint32> remap(indices.size());
-    // size_t              vertex_count =
-    //     meshopt_generateVertexRemap(&remap[0], indices.data(), index_count, &vertices[0], index_count, sizeof(Vertex));
+    std::vector<uint32> remapIndices;
+    remapIndices.reserve(indices.size());
 
-    // std::vector<Vertex> remapVertices(vertex_count);
-    // std::vector<uint32> remapIndices(index_count);
+    std::map<uint64, size_t> verticesMap;
 
-    // meshopt_remapVertexBuffer(remapVertices.data(), vertices.data(), index_count, sizeof(Vertex), remap.data());
-    // meshopt_remapIndexBuffer(remapIndices.data(), indices.data(), index_count, remap.data());
+    uint32 fuseCount = 0;
 
-    // meshopt_optimizeVertexCache(remapIndices.data(), remapIndices.data(), index_count, vertex_count);
-    // meshopt_optimizeVertexFetch(
-    //     remapVertices.data(),
-    //     remapIndices.data(),
-    //     index_count,
-    //     remapVertices.data(),
-    //     vertex_count,
-    //     sizeof(Vertex)
-    // );
+    for (uint32 index: indices) {
+        const Vertex& vertex = vertices[index];
 
-    // m_indices  = std::move(remapIndices);
-    // m_vertices = std::move(remapVertices);
+        const uint64 hashId = cityhash::cityhash64((const char*)&vertex, sizeof(Vertex));
+        if (!verticesMap.contains(hashId)) {
+            verticesMap[hashId] = remapVertices.size();
+            remapVertices.push_back(vertex);
+        } else {
+            fuseCount++;
+        }
+
+        remapIndices.push_back(verticesMap[hashId]);
+    }
+
+    indices  = std::move(remapIndices);
+    vertices = std::move(remapVertices);
 }
 
-uint32 PackCone(Vector3f normal, float cutoff) {
-    // 从[-1,1]转换到[0,1]范围
-    normal = (normal + 1.0f) * 0.5f;
+MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, std::vector<Vertex>& vertices_in) {
+    //FuseVertices(indices_in, vertices_in);
 
-    // 将所有分量缩放到[0,255]并转为整数
-    uint32 x = static_cast<uint32>(Math::clamp(normal[0] * 255.0, 0.0, 255.0));
-    uint32 y = static_cast<uint32>(Math::clamp(normal[1] * 255.0, 0.0, 255.0));
-    uint32 z = static_cast<uint32>(Math::clamp(normal[2] * 255.0, 0.0, 255.0));
-    uint32 w = static_cast<uint32>(Math::clamp(cutoff * 255.0, 0.0, 255.0));
+    size_t original_index_count  = indices_in.size();
+    size_t original_vertex_count = vertices_in.size();
 
-    // 打包成32位整数，每个分量占8位
-    return (x << 0) | (y << 8) | (z << 16) | (w << 24);
-}
+    // 第1步：顶点去重和优化
+    std::vector<uint32_t> remap_table(original_vertex_count);
+    size_t                unique_vertex_count = meshopt_generateVertexRemap(
+        remap_table.data(),
+        indices_in.empty() ? nullptr : indices_in.data(),
+        original_index_count,
+        vertices_in.data(),
+        original_vertex_count,
+        sizeof(Vertex)
+    );
 
-MeshletsContext NanityBuilder::Build() const {
+    std::vector<Vertex> remapped_vertices(unique_vertex_count);
+    meshopt_remapVertexBuffer(
+        remapped_vertices.data(),
+        vertices_in.data(),
+        original_vertex_count,
+        sizeof(Vertex),
+        remap_table.data()
+    );
+
+    std::vector<uint32_t> remapped_indices(original_index_count);
+    meshopt_remapIndexBuffer(
+        remapped_indices.data(),
+        indices_in.empty() ? nullptr : indices_in.data(),
+        original_index_count,
+        remap_table.data()
+    );
+
+    // 优化顶点缓存和顶点提取
+    meshopt_optimizeVertexCache(
+        remapped_indices.data(),
+        remapped_indices.data(),
+        original_index_count,
+        unique_vertex_count
+    );
+
+    meshopt_optimizeVertexFetch(
+        remapped_vertices.data(),
+        remapped_indices.data(),
+        original_index_count,
+        remapped_vertices.data(),
+        unique_vertex_count,
+        sizeof(Vertex)
+    );
+
+    // 第2步：构建Meshlet
     constexpr uint32 kMeshletVertexMaxNum   = 64;
     constexpr uint32 kMeshletTriangleMaxNum = 124;
     constexpr float  kConeWeight            = 0.25f;
 
     MeshletsContext context {};
 
-    // 构建meshopt meshlet
     std::vector<meshopt_Meshlet> meshlets;
-    size_t max_meshlets = meshopt_buildMeshletsBound(m_indices.size(), kMeshletVertexMaxNum, kMeshletTriangleMaxNum);
+    size_t                       max_meshlets =
+        meshopt_buildMeshletsBound(remapped_indices.size(), kMeshletVertexMaxNum, kMeshletTriangleMaxNum);
     meshlets.resize(max_meshlets);
 
     std::vector<uint32> meshlet_vertices(max_meshlets * kMeshletVertexMaxNum);
     std::vector<uint8>  meshlet_triangles(max_meshlets * kMeshletTriangleMaxNum * 3);
-    const uint32        vertices_count = m_vertices.size();
-    size_t              meshlet_count  = meshopt_buildMeshlets(
+
+    size_t meshlet_count = meshopt_buildMeshlets(
         meshlets.data(),
         meshlet_vertices.data(),
         meshlet_triangles.data(),
-        m_indices.data(),
-        m_indices.size(),
-        &m_vertices[0].position.x,
-        vertices_count,
-        sizeof(m_vertices[0]),
+        remapped_indices.data(),
+        remapped_indices.size(),
+        &remapped_vertices[0].position.x,
+        remapped_vertices.size(),
+        sizeof(remapped_vertices[0]),
         kMeshletVertexMaxNum,
         kMeshletTriangleMaxNum,
         kConeWeight
@@ -88,17 +119,14 @@ MeshletsContext NanityBuilder::Build() const {
     meshlets.resize(meshlet_count);
     auto& last_meshlet = meshlets.back();
     meshlet_vertices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-    meshlet_triangles.resize(
-        last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3)
-    ); // 对齐到4的倍数
+    meshlet_triangles.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
 
+    // 第3步：计算包围体
     std::vector<BoundsData> meshlet_bounds(meshlets.size());
-    // 填充meshlet信息到context
     for (int i = 0; i < meshlets.size(); i++) {
         auto& meshlet = meshlets[i];
         auto& bounds  = meshlet_bounds[i];
 
-        // 优化meshlet的局部性
         meshopt_optimizeMeshlet(
             &meshlet_vertices[meshlet.vertex_offset],
             &meshlet_triangles[meshlet.triangle_offset],
@@ -111,17 +139,17 @@ MeshletsContext NanityBuilder::Build() const {
             &meshlet_vertices[meshlet.vertex_offset],
             &meshlet_triangles[meshlet.triangle_offset],
             meshlet.triangle_count,
-            &m_vertices[0].position.x,
-            vertices_count,
-            sizeof(m_vertices[0])
+            &remapped_vertices[0].position.x,
+            remapped_vertices.size(),
+            sizeof(remapped_vertices[0])
         );
 
         Vector3f center { meshopt_bounds.center[0], meshopt_bounds.center[1], meshopt_bounds.center[2] };
         Vector3f apex { meshopt_bounds.cone_apex[0], meshopt_bounds.cone_apex[1], meshopt_bounds.cone_apex[2] };
         Vector3f axis(meshopt_bounds.cone_axis[0], meshopt_bounds.cone_axis[1], meshopt_bounds.cone_axis[2]);
 
-        float angle          = acos(meshopt_bounds.cone_cutoff); // cone_cutoff 是 cos(角度)，需要转换为 -cos(角度+90°)
-        float modifiedCutoff = -cos(angle + 1.57079632679f); // 1.57... 是 90° 的弧度值
+        float angle          = acos(meshopt_bounds.cone_cutoff);
+        float modifiedCutoff = -cos(angle + 1.57079632679f);
         float apex_offset    = Math::dot(center - apex, axis);
 
         bounds.sphere      = Vector4f(center, meshopt_bounds.radius);
@@ -129,6 +157,7 @@ MeshletsContext NanityBuilder::Build() const {
         bounds.apex_offset = apex_offset;
     }
 
+    // 第4步：处理三角形数据
     std::vector<uint32_t> meshlet_triangles_u32;
     for (auto& m: meshlets) {
         uint32 triangle_offset = static_cast<uint32>(meshlet_triangles_u32.size());
@@ -150,13 +179,24 @@ MeshletsContext NanityBuilder::Build() const {
         m.triangle_offset = triangle_offset;
     }
 
-    // 拷贝
-    context.meshlets  = std::move(meshlets);
-    context.triangles = std::move(meshlet_triangles_u32);
-    context.vertices  = std::move(meshlet_vertices);
-    context.bounds    = std::move(meshlet_bounds);
+    // 填充context结构
+    context.meshlets     = std::move(meshlets);
+    context.triangles    = std::move(meshlet_triangles_u32);
+    context.vertices     = std::move(meshlet_vertices);
+    context.bounds       = std::move(meshlet_bounds);
+    context.opt_vertices = std::move(remapped_vertices);
 
     return context;
+}
+
+// PackCone实现保持不变
+uint32 MeshletBuilder::PackCone(Vector3f normal, float cutoff) {
+    normal   = (normal + 1.0f) * 0.5f;
+    uint32 x = static_cast<uint32>(Math::clamp(normal[0] * 255.0, 0.0, 255.0));
+    uint32 y = static_cast<uint32>(Math::clamp(normal[1] * 255.0, 0.0, 255.0));
+    uint32 z = static_cast<uint32>(Math::clamp(normal[2] * 255.0, 0.0, 255.0));
+    uint32 w = static_cast<uint32>(Math::clamp(cutoff * 255.0, 0.0, 255.0));
+    return (x << 0) | (y << 8) | (z << 16) | (w << 24);
 }
 
 } // namespace Nanity

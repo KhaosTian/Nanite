@@ -6,49 +6,25 @@
 #else
     #define EXPORT_API extern "C"
 #endif
-// Create and return a NanityBuilder instance
+// 替换原有的CreateNanityBuilder, DestroyNanityBuilder和BuildMeshlets函数
 EXPORT_API void*
-CreateNanityBuilder(const uint32_t* indices, uint32_t indicesCount, const float* positions, uint32_t positionsCount) {
+BuildMeshlets(const uint32_t* indices, uint32_t indicesCount, const float* positions, uint32_t positionsCount) {
     try {
+        // 转换输入数据
         std::vector<uint32_t> indicesVec(indices, indices + indicesCount);
 
-        // Convert positions from float array to Point3f vector
-        std::vector<Nanity::Vertex> positionsVec;
-        positionsVec.reserve(positionsCount / 3);
+        std::vector<Nanity::Vertex> verticesVec;
+        verticesVec.reserve(positionsCount / 3);
         for (uint32_t i = 0; i < positionsCount; i += 3) {
-            positionsVec.emplace_back(Nanity::Vertex { { positions[i], positions[i + 1], positions[i + 2] } });
+            verticesVec.emplace_back(Nanity::Vertex { { positions[i], positions[i + 1], positions[i + 2] } });
         }
 
-        // Create and return a new NanityBuilder
-        return new Nanity::NanityBuilder(indicesVec, positionsVec);
-    } catch (const std::exception&) {
-        return nullptr;
-    }
-}
-// Free the NanityBuilder instance
-EXPORT_API void DestroyNanityBuilder(void* builder) {
-    if (builder) {
-        delete static_cast<Nanity::NanityBuilder*>(builder);
-    }
-}
-// Build and return a MeshletsContext
-EXPORT_API void* BuildMeshlets(void* builder) {
-    try {
-        if (!builder) {
-            printf("BuildMeshlets: Null builder pointer\n");
-            return nullptr;
-        }
-        auto NanityBuilder = static_cast<Nanity::NanityBuilder*>(builder);
-
-        // Create a new context
-        Nanity::MeshletsContext* context = new Nanity::MeshletsContext();
-
-        // Copy the result from Build()
-        *context = NanityBuilder->Build();
+        // 直接调用静态方法构建MeshletsContext
+        auto context = new Nanity::MeshletsContext();
+        *context     = Nanity::MeshletBuilder::BuildMeshlets(indicesVec, verticesVec);
 
         return context;
     } catch (const std::exception& e) {
-        // Log the exception for debugging
         printf("BuildMeshlets exception: %s\n", e.what());
         return nullptr;
     } catch (...) {
@@ -63,6 +39,7 @@ EXPORT_API void DestroyMeshletsContext(void* context) {
         delete static_cast<Nanity::MeshletsContext*>(context);
     }
 }
+
 // Get data from MeshletsContext
 EXPORT_API uint32_t GetMeshletsCount(void* context) {
     if (!context) return 0;
@@ -127,5 +104,32 @@ EXPORT_API bool GetBounds(void* context, Nanity::BoundsData* bounds_data, uint32
         meshletsContext->bounds.data(),
         meshletsContext->bounds.size() * sizeof(Nanity::BoundsData)
     );
+    return true;
+}
+
+// 获取优化后的顶点数量
+EXPORT_API uint32_t GetOptimizedVertexCount(void* context) {
+    if (!context) return 0;
+
+    auto meshletsContext = static_cast<Nanity::MeshletsContext*>(context);
+    return static_cast<uint32_t>(meshletsContext->opt_vertices.size());
+}
+// 获取优化后的顶点位置数据
+EXPORT_API bool GetOptimizedVertexPositions(void* context, float* positions, uint32_t bufferSize) {
+    if (!context || !positions) return false;
+
+    auto        meshletsContext = static_cast<Nanity::MeshletsContext*>(context);
+    const auto& vertices        = meshletsContext->opt_vertices;
+
+    // 确保缓冲区足够大 (每个顶点3个float)
+    if (bufferSize < vertices.size() * 3) return false;
+
+    // 复制顶点位置
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        positions[i * 3 + 0] = vertices[i].position.x;
+        positions[i * 3 + 1] = vertices[i].position.y;
+        positions[i * 3 + 2] = vertices[i].position.z;
+    }
+
     return true;
 }
