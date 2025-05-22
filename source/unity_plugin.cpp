@@ -15,6 +15,8 @@ EXPORT_API void* BuildMeshlets(
     bool            enable_fuse,
     bool            enable_opt,
     bool            enable_remap,
+    uint32_t        max_vertices,
+    uint32_t        max_triangles,
     float           cone_weight
 ) {
     try {
@@ -31,12 +33,14 @@ EXPORT_API void* BuildMeshlets(
         auto context = new Nanity::MeshletsContext();
 
         Nanity::BuildSettings settings;
-        settings.enable_fuse = enable_fuse;
-        settings.enable_opt  = enable_opt;
-        settings.enable_remap = enable_remap;
-        settings.cone_weight  = cone_weight;
-      
-        *context              = Nanity::MeshletBuilder::BuildMeshlets(indicesVec, verticesVec, settings);
+        settings.enable_fuse   = enable_fuse;
+        settings.enable_opt    = enable_opt;
+        settings.enable_remap  = enable_remap;
+        settings.max_vertices  = max_vertices;
+        settings.max_triangles = max_triangles;
+        settings.cone_weight   = cone_weight;
+
+        *context = Nanity::MeshletBuilder::BuildMeshlets(indicesVec, verticesVec, settings);
 
         return context;
     } catch (const std::exception& e) {

@@ -104,15 +104,11 @@ MeshletsContext MeshletBuilder::BuildMeshlets(
     MeshletsContext context {};
 
     std::vector<meshopt_Meshlet> meshlets;
-    size_t                       max_meshlets = meshopt_buildMeshletsBound(
-        indices_in.size(),
-        settings.meshlet_vertex_max_num,
-        settings.meshlet_triangle_max_num
-    );
+    size_t max_meshlets = meshopt_buildMeshletsBound(indices_in.size(), settings.max_vertices, settings.max_triangles);
     meshlets.resize(max_meshlets);
 
-    std::vector<uint32> meshlet_vertices(max_meshlets * settings.meshlet_vertex_max_num);
-    std::vector<uint8>  meshlet_triangles(max_meshlets * settings.meshlet_triangle_max_num * 3);
+    std::vector<uint32> meshlet_vertices(max_meshlets * settings.max_vertices);
+    std::vector<uint8>  meshlet_triangles(max_meshlets * settings.max_triangles * 3);
 
     size_t meshlet_count = meshopt_buildMeshlets(
         meshlets.data(),
@@ -123,8 +119,8 @@ MeshletsContext MeshletBuilder::BuildMeshlets(
         &vertices_in[0].position.x,
         vertices_in.size(),
         sizeof(vertices_in[0]),
-        settings.meshlet_vertex_max_num,
-        settings.meshlet_triangle_max_num,
+        settings.max_vertices,
+        settings.max_triangles,
         settings.cone_weight
     );
 
@@ -135,6 +131,7 @@ MeshletsContext MeshletBuilder::BuildMeshlets(
 
     std::vector<BoundsData> meshlet_bounds(meshlets.size());
     std::vector<uint32_t>   meshlet_triangles_u32;
+    meshlet_triangles_u32.reserve(indices_in.size() / 3);
     for (int i = 0; i < meshlets.size(); i++) {
         auto& meshlet     = meshlets[i];
         auto& bounds_data = meshlet_bounds[i];
@@ -164,26 +161,26 @@ MeshletsContext MeshletBuilder::BuildMeshlets(
 
         bool isDegenerate = false;
 
-        Vector3f axis = { bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2] };
-        Vector3f apex = { bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2] };
+        Vector3f cone_axis = { bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2] };
+        Vector3f cone_apex = { bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2] };
 
-        std::vector<Vector3f> traingleVertices(3);
+        Vector3f triangleVertices[3];
         for (uint32 triangleId = 0; triangleId < meshlet.triangle_count; triangleId++) {
             uint32_t packed = 0;
             for (uint32 j = 0; j < 3; j++) {
                 uint8  vIdx              = meshlet_triangles[3 * triangleId + j + meshlet.triangle_offset];
                 uint32 globalVertexIndex = meshlet_vertices[meshlet.vertex_offset + vIdx];
-                traingleVertices[j]      = vertices_in[globalVertexIndex].position;
-                pos_max                  = Math::max(pos_max, traingleVertices[j]);
-                pos_min                  = Math::min(pos_min, traingleVertices[j]);
+                triangleVertices[j]      = vertices_in[globalVertexIndex].position;
+                pos_max                  = Math::max(pos_max, triangleVertices[j]);
+                pos_min                  = Math::min(pos_min, triangleVertices[j]);
                 packed |= (static_cast<uint32_t>(vIdx) & 0xFF) << (8 * j);
             }
             meshlet_triangles_u32.push_back(packed);
 
             auto faceNormal = Math::normalize(
-                Math::cross(traingleVertices[1] - traingleVertices[0], traingleVertices[2] - traingleVertices[1])
+                Math::cross(triangleVertices[1] - triangleVertices[0], triangleVertices[2] - triangleVertices[1])
             );
-            if (Math::dot(faceNormal, axis) < 0.1f) {
+            if (Math::dot(faceNormal, cone_axis) < 0.1f) {
                 isDegenerate = true;
             }
         }
@@ -192,14 +189,12 @@ MeshletsContext MeshletBuilder::BuildMeshlets(
         Vector3f center         = 0.5f * (pos_max + pos_min);
         float    radius         = Math::length(pos_max - center);
 
-        // 获取meshlet的包围体和法线锥
-
         float angle          = Math::acos(bounds.cone_cutoff);
-        float modifiedCutoff = isDegenerate ? 1.0f : -Math::cos(angle + Math::radians(90.0f));
-        float apex_offset    = Math::dot(center - apex, axis);
+        float modifiedCutoff = isDegenerate ? 1.0f : -Math::cos(angle + 1.5707963268f);
+        float apex_offset    = Math::dot(center - cone_apex, cone_axis);
 
         bounds_data.sphere      = Vector4f(center, bounds.radius);
-        bounds_data.normal_cone = PackCone(axis, modifiedCutoff);
+        bounds_data.normal_cone = PackCone(cone_axis, modifiedCutoff);
         bounds_data.apex_offset = apex_offset;
     }
 
