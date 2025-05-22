@@ -1,5 +1,6 @@
 #include "nanity.h"
 #include "utils/utils.h"
+#include <limits>
 #include <metis.h>
 #include "utils/cityhash.h"
 
@@ -134,6 +135,21 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
             meshlet.vertex_count
         );
 
+        Vector3f pos_min = Vector3f(std::numeric_limits<float>::max());
+        Vector3f pos_max = Vector3f(std::numeric_limits<float>::lowest());
+
+        for (uint32 triangleId = 0; triangleId < meshlet.triangle_count; triangleId++) {
+            for (uint32 vertexId = 0; vertexId < 3; vertexId++) {
+                uint8  id  = meshlet_triangles[meshlet.triangle_offset + triangleId * 3 + vertexId];
+                uint32 vid = meshlet_vertices[meshlet.vertex_offset + id];
+                pos_max    = Math::max(pos_max, remapped_vertices[vid].position);
+                pos_min    = Math::min(pos_min, remapped_vertices[vid].position);
+            }
+        }
+
+        const Vector3f center = 0.5f * (pos_max + pos_min);
+        const float    radius = Math::length(pos_max - center);
+
         // 获取meshlet的包围体和法线锥
         meshopt_Bounds meshopt_bounds = meshopt_computeMeshletBounds(
             &meshlet_vertices[meshlet.vertex_offset],
@@ -144,7 +160,6 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
             sizeof(remapped_vertices[0])
         );
 
-        Vector3f center { meshopt_bounds.center[0], meshopt_bounds.center[1], meshopt_bounds.center[2] };
         Vector3f apex { meshopt_bounds.cone_apex[0], meshopt_bounds.cone_apex[1], meshopt_bounds.cone_apex[2] };
         Vector3f axis(meshopt_bounds.cone_axis[0], meshopt_bounds.cone_axis[1], meshopt_bounds.cone_axis[2]);
 
@@ -152,7 +167,7 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
         float modifiedCutoff = -cos(angle + 1.57079632679f);
         float apex_offset    = Math::dot(center - apex, axis);
 
-        bounds.sphere      = Vector4f(center, meshopt_bounds.radius);
+        bounds.sphere      = Vector4f(center, radius);
         bounds.normal_cone = PackCone(axis, modifiedCutoff);
         bounds.apex_offset = apex_offset;
     }
