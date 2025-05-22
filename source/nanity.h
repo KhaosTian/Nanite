@@ -27,13 +27,24 @@ struct MeshletsContext {
     std::vector<Vertex>     opt_vertices; // 优化后的顶点数组
 };
 
+struct BuildSettings {
+    bool   enable_fuse              = true;
+    bool   enable_opt               = true;
+    bool   enable_remap             = true;
+    uint32 meshlet_vertex_max_num   = 64;
+    uint32 meshlet_triangle_max_num = 124;
+    float  cone_weight              = 1.0f;
+};
+
 // 新的静态类设计
 class MeshletBuilder {
 public:
-    static MeshletsContext BuildMeshlets(std::vector<uint32>& indices, std::vector<Vertex>& vertices);
+    static MeshletsContext
+    BuildMeshlets(std::vector<uint32>& indices, std::vector<Vertex>& vertices, const BuildSettings& settings);
 
 private:
     // 工具函数
+    static void   RemapVertices(std::vector<uint32>& indices_in, std::vector<Vertex>& vertices_in);
     static void   FuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices);
     static int32  HashPosition(const Vector3f& position);
     static uint32 PackCone(Vector3f normal, float cutoff);

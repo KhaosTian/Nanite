@@ -1,4 +1,5 @@
 #include "nanity.h"
+#include "glm/trigonometric.hpp"
 #include "utils/utils.h"
 #include <limits>
 #include <metis.h>
@@ -7,38 +8,36 @@
 // nanity.cpp
 namespace Nanity {
 
-void MeshletBuilder::FuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices) {
-    std::vector<Vertex> remapVertices;
-    remapVertices.reserve(vertices.size());
+void MeshletBuilder::FuseVertices(std::vector<uint32>& indices_in, std::vector<Vertex>& vertices_in) {
+    std::vector<Vertex> remapped_vertices;
+    remapped_vertices.reserve(vertices_in.size());
 
-    std::vector<uint32> remapIndices;
-    remapIndices.reserve(indices.size());
+    std::vector<uint32> remapped_indices;
+    remapped_indices.reserve(indices_in.size());
 
-    std::map<uint64, size_t> verticesMap;
+    std::map<uint64, size_t> vertices_map;
 
-    uint32 fuseCount = 0;
+    uint32 fuse_count = 0;
 
-    for (uint32 index: indices) {
-        const Vertex& vertex = vertices[index];
+    for (uint32 index: indices_in) {
+        const Vertex& vertex = vertices_in[index];
 
         const uint64 hashId = cityhash::cityhash64((const char*)&vertex, sizeof(Vertex));
-        if (!verticesMap.contains(hashId)) {
-            verticesMap[hashId] = remapVertices.size();
-            remapVertices.push_back(vertex);
+        if (!vertices_map.contains(hashId)) {
+            vertices_map[hashId] = remapped_vertices.size();
+            remapped_vertices.push_back(vertex);
         } else {
-            fuseCount++;
+            fuse_count++;
         }
 
-        remapIndices.push_back(verticesMap[hashId]);
+        remapped_indices.push_back(vertices_map[hashId]);
     }
 
-    indices  = std::move(remapIndices);
-    vertices = std::move(remapVertices);
+    indices_in  = std::move(remapped_indices);
+    vertices_in = std::move(remapped_vertices);
 }
 
-MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, std::vector<Vertex>& vertices_in) {
-    //FuseVertices(indices_in, vertices_in);
-
+void MeshletBuilder::RemapVertices(std::vector<uint32>& indices_in, std::vector<Vertex>& vertices_in) {
     size_t original_index_count  = indices_in.size();
     size_t original_vertex_count = vertices_in.size();
 
@@ -87,33 +86,49 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
         sizeof(Vertex)
     );
 
-    // 第2步：构建Meshlet
-    constexpr uint32 kMeshletVertexMaxNum   = 64;
-    constexpr uint32 kMeshletTriangleMaxNum = 124;
-    constexpr float  kConeWeight            = 0.25f;
+    indices_in  = std::move(remapped_indices);
+    vertices_in = std::move(remapped_vertices);
+}
 
+MeshletsContext MeshletBuilder::BuildMeshlets(
+    std::vector<uint32>& indices_in,
+    std::vector<Vertex>& vertices_in,
+    const BuildSettings& settings
+) {
+    if (settings.enable_fuse) {
+        FuseVertices(indices_in, vertices_in);
+    }
+
+    if (settings.enable_remap) {
+        RemapVertices(indices_in, vertices_in);
+    }
+
+    // 第2步：构建Meshlet
     MeshletsContext context {};
 
     std::vector<meshopt_Meshlet> meshlets;
-    size_t                       max_meshlets =
-        meshopt_buildMeshletsBound(remapped_indices.size(), kMeshletVertexMaxNum, kMeshletTriangleMaxNum);
+    size_t                       max_meshlets = meshopt_buildMeshletsBound(
+        indices_in.size(),
+        settings.meshlet_vertex_max_num,
+        settings.meshlet_triangle_max_num
+    );
     meshlets.resize(max_meshlets);
 
-    std::vector<uint32> meshlet_vertices(max_meshlets * kMeshletVertexMaxNum);
-    std::vector<uint8>  meshlet_triangles(max_meshlets * kMeshletTriangleMaxNum * 3);
+    std::vector<uint32> meshlet_vertices(max_meshlets * settings.meshlet_vertex_max_num);
+    std::vector<uint8>  meshlet_triangles(max_meshlets * settings.meshlet_triangle_max_num * 3);
 
     size_t meshlet_count = meshopt_buildMeshlets(
         meshlets.data(),
         meshlet_vertices.data(),
         meshlet_triangles.data(),
-        remapped_indices.data(),
-        remapped_indices.size(),
-        &remapped_vertices[0].position.x,
-        remapped_vertices.size(),
-        sizeof(remapped_vertices[0]),
-        kMeshletVertexMaxNum,
-        kMeshletTriangleMaxNum,
-        kConeWeight
+        indices_in.data(),
+        indices_in.size(),
+        &vertices_in[0].position.x,
+        vertices_in.size(),
+        sizeof(vertices_in[0]),
+        settings.meshlet_vertex_max_num,
+        settings.meshlet_triangle_max_num,
+        settings.cone_weight
     );
 
     // 裁剪多余的数组元素
@@ -123,17 +138,19 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
     meshlet_triangles.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
 
     // 第3步：计算包围体
-    std::vector<BoundsData> meshlet_bounds(meshlets.size());
+    std::vector<meshopt_Bounds> meshlet_bounds(meshlets.size());
     for (int i = 0; i < meshlets.size(); i++) {
         auto& meshlet = meshlets[i];
         auto& bounds  = meshlet_bounds[i];
 
-        meshopt_optimizeMeshlet(
-            &meshlet_vertices[meshlet.vertex_offset],
-            &meshlet_triangles[meshlet.triangle_offset],
-            meshlet.triangle_count,
-            meshlet.vertex_count
-        );
+        if (settings.enable_opt) {
+            meshopt_optimizeMeshlet(
+                &meshlet_vertices[meshlet.vertex_offset],
+                &meshlet_triangles[meshlet.triangle_offset],
+                meshlet.triangle_count,
+                meshlet.vertex_count
+            );
+        }
 
         Vector3f pos_min = Vector3f(std::numeric_limits<float>::max());
         Vector3f pos_max = Vector3f(std::numeric_limits<float>::lowest());
@@ -142,45 +159,49 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
             for (uint32 vertexId = 0; vertexId < 3; vertexId++) {
                 uint8  id  = meshlet_triangles[meshlet.triangle_offset + triangleId * 3 + vertexId];
                 uint32 vid = meshlet_vertices[meshlet.vertex_offset + id];
-                pos_max    = Math::max(pos_max, remapped_vertices[vid].position);
-                pos_min    = Math::min(pos_min, remapped_vertices[vid].position);
+                pos_max    = Math::max(pos_max, vertices_in[vid].position);
+                pos_min    = Math::min(pos_min, vertices_in[vid].position);
             }
         }
-
-        const Vector3f center = 0.5f * (pos_max + pos_min);
-        const float    radius = Math::length(pos_max - center);
+        Vector3f center = 0.5f * (pos_max + pos_min);
+        float    radius = Math::length(pos_max - center);
 
         // 获取meshlet的包围体和法线锥
         meshopt_Bounds meshopt_bounds = meshopt_computeMeshletBounds(
             &meshlet_vertices[meshlet.vertex_offset],
             &meshlet_triangles[meshlet.triangle_offset],
             meshlet.triangle_count,
-            &remapped_vertices[0].position.x,
-            remapped_vertices.size(),
-            sizeof(remapped_vertices[0])
+            &vertices_in[0].position.x,
+            vertices_in.size(),
+            sizeof(vertices_in[0])
         );
 
-        Vector3f apex { meshopt_bounds.cone_apex[0], meshopt_bounds.cone_apex[1], meshopt_bounds.cone_apex[2] };
-        Vector3f axis(meshopt_bounds.cone_axis[0], meshopt_bounds.cone_axis[1], meshopt_bounds.cone_axis[2]);
-
-        float angle          = acos(meshopt_bounds.cone_cutoff);
-        float modifiedCutoff = -cos(angle + 1.57079632679f);
-        float apex_offset    = Math::dot(center - apex, axis);
-
-        bounds.sphere      = Vector4f(center, radius);
-        bounds.normal_cone = PackCone(axis, modifiedCutoff);
-        bounds.apex_offset = apex_offset;
+        meshopt_bounds.center[0] = center[0];
+        meshopt_bounds.center[1] = center[1];
+        meshopt_bounds.center[2] = center[2];
+        meshopt_bounds.radius    = radius;
+        meshlet_bounds[i]        = meshopt_bounds;
     }
 
     // 第4步：处理三角形数据
-    std::vector<uint32_t> meshlet_triangles_u32;
-    for (auto& m: meshlets) {
-        uint32 triangle_offset = static_cast<uint32>(meshlet_triangles_u32.size());
+    std::vector<BoundsData> bounds_data(meshlets.size());
+    std::vector<uint32_t>   meshlet_triangles_u32;
+    for (int i = 0; i < meshlets.size(); i++) {
+        auto& meshlet = meshlets[i];
+        auto& bounds  = meshlet_bounds[i];
 
-        for (uint32 i = 0; i < m.triangle_count; ++i) {
-            uint32 i0 = 3 * i + 0 + m.triangle_offset;
-            uint32 i1 = 3 * i + 1 + m.triangle_offset;
-            uint32 i2 = 3 * i + 2 + m.triangle_offset;
+        bool isDegenerate = false;
+
+        Vector3f cone_normal = { bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2] };
+        Vector3f apex        = { bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2] };
+        Vector3f center      = { bounds.center[0], bounds.center[1], bounds.center[2] };
+
+        // 三角形
+        uint32 triangle_offset = static_cast<uint32>(meshlet_triangles_u32.size());
+        for (uint32 j = 0; j < meshlet.triangle_count; ++j) {
+            uint32 i0 = 3 * j + 0 + meshlet.triangle_offset;
+            uint32 i1 = 3 * j + 1 + meshlet.triangle_offset;
+            uint32 i2 = 3 * j + 2 + meshlet.triangle_offset;
 
             uint8 vIdx0 = meshlet_triangles[i0];
             uint8 vIdx1 = meshlet_triangles[i1];
@@ -190,16 +211,40 @@ MeshletsContext MeshletBuilder::BuildMeshlets(std::vector<uint32>& indices_in, s
                               ((static_cast<uint32_t>(vIdx1) & 0xFF) << 8) |
                               ((static_cast<uint32_t>(vIdx2) & 0xFF) << 16);
             meshlet_triangles_u32.push_back(packed);
+
+            auto globalVertexIndex0 = meshlet_vertices[meshlet.vertex_offset + vIdx0];
+            auto globalVertexIndex1 = meshlet_vertices[meshlet.vertex_offset + vIdx1];
+            auto globalVertexIndex2 = meshlet_vertices[meshlet.vertex_offset + vIdx2];
+
+            auto vertex0 = vertices_in[globalVertexIndex0];
+            auto vertex1 = vertices_in[globalVertexIndex1];
+            auto vertex2 = vertices_in[globalVertexIndex2];
+
+            auto faceNormal =
+                Math::normalize(Math::cross(vertex1.position - vertex0.position, vertex2.position - vertex0.position));
+
+            if (Math::dot(faceNormal, cone_normal) < 0.1f) {
+                isDegenerate = true;
+            }
         }
-        m.triangle_offset = triangle_offset;
+        meshlet.triangle_offset = triangle_offset;
+
+        // 包围体信息
+        float angle          = Math::acos(bounds.cone_cutoff);
+        float modifiedCutoff = -Math::cos(angle + Math::radians(90.0f));
+        float apex_offset    = Math::dot(center - apex, cone_normal);
+
+        bounds_data[i].sphere      = Vector4f(center, bounds.radius);
+        bounds_data[i].normal_cone = PackCone(cone_normal, isDegenerate ? 1.0f : modifiedCutoff);
+        bounds_data[i].apex_offset = apex_offset;
     }
 
     // 填充context结构
     context.meshlets     = std::move(meshlets);
     context.triangles    = std::move(meshlet_triangles_u32);
     context.vertices     = std::move(meshlet_vertices);
-    context.bounds       = std::move(meshlet_bounds);
-    context.opt_vertices = std::move(remapped_vertices);
+    context.bounds       = std::move(bounds_data);
+    context.opt_vertices = std::move(vertices_in);
 
     return context;
 }

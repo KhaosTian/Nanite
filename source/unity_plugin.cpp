@@ -7,8 +7,16 @@
     #define EXPORT_API extern "C"
 #endif
 // 替换原有的CreateNanityBuilder, DestroyNanityBuilder和BuildMeshlets函数
-EXPORT_API void*
-BuildMeshlets(const uint32_t* indices, uint32_t indicesCount, const float* positions, uint32_t positionsCount) {
+EXPORT_API void* BuildMeshlets(
+    const uint32_t* indices,
+    uint32_t        indicesCount,
+    const float*    positions,
+    uint32_t        positionsCount,
+    bool            enable_fuse,
+    bool            enable_opt,
+    bool            enable_remap,
+    float           cone_weight
+) {
     try {
         // 转换输入数据
         std::vector<uint32_t> indicesVec(indices, indices + indicesCount);
@@ -21,7 +29,14 @@ BuildMeshlets(const uint32_t* indices, uint32_t indicesCount, const float* posit
 
         // 直接调用静态方法构建MeshletsContext
         auto context = new Nanity::MeshletsContext();
-        *context     = Nanity::MeshletBuilder::BuildMeshlets(indicesVec, verticesVec);
+
+        Nanity::BuildSettings settings;
+        settings.enable_fuse = enable_fuse;
+        settings.enable_opt  = enable_opt;
+        settings.enable_remap = enable_remap;
+        settings.cone_weight  = cone_weight;
+      
+        *context              = Nanity::MeshletBuilder::BuildMeshlets(indicesVec, verticesVec, settings);
 
         return context;
     } catch (const std::exception& e) {
